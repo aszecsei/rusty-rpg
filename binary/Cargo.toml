@@ -1,0 +1,8 @@
+[package]
+name = "main"
+version = "0.1.0"
+authors = ["Alic Szecsei <aszecsei@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+engine = { path = "../engine" }
