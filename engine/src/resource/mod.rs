@@ -18,6 +18,20 @@ impl From<&str> for ResourceID {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::Bencher;
+
+    #[bench]
+    fn bench_resource_hash(b: &mut Bencher) {
+        b.iter(|| {
+            let n = crate::test::black_box("hello, world");
+            ResourceID::from(n)
+        });
+    }
+}
+
 pub struct ResourceManager {
     shaders: FnvHashMap<ResourceID, Shader>,
     textures: FnvHashMap<ResourceID, Texture>

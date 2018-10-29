@@ -1,3 +1,5 @@
+#![feature(test)]
+
 extern crate cgmath;
 extern crate fnv;
 extern crate gl;
@@ -17,10 +19,11 @@ extern crate serde_yaml;
 extern crate strum;
 #[macro_use]
 extern crate strum_macros;
+extern crate test;
 
 mod renderer;
 mod resource;
-
+mod time;
 
 pub fn run() {
     info!("Creating window...");
