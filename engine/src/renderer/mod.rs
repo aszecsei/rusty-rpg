@@ -125,7 +125,7 @@ impl RenderManager {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             let shader_id = crate::resource::ResourceID::from("sprite_shader");
-            let shader_program = resource_manager.get_shader(&shader_id);
+            let shader_program = resource_manager.get_shader(shader_id);
             shader_program.use_shader();
             shader_program.set_matrix4("MVP", mvp, false);
 

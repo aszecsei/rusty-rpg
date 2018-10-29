@@ -65,8 +65,8 @@ impl ResourceManager {
         shader_program
     }
 
-    pub fn get_shader(&self, name: &ResourceID) -> Shader {
-        self.shaders[name]
+    pub fn get_shader(&self, name: ResourceID) -> Shader {
+        self.shaders[&name]
     }
 
     pub fn shutdown(&mut self) {
