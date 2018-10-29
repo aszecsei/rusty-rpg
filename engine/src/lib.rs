@@ -1,55 +1,43 @@
+extern crate cgmath;
+extern crate fnv;
 extern crate gl;
 extern crate glutin;
+extern crate image;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
+extern crate num;
+extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+extern crate serde_yaml;
+extern crate strum;
+#[macro_use]
+extern crate strum_macros;
 
-use gl::types::*;
-use glutin::dpi::*;
-use glutin::GlContext;
+mod renderer;
+mod resource;
+
 
 pub fn run() {
-    let mut events_loop = glutin::EventsLoop::new();
+    info!("Creating window...");
+    let mut window_manager = renderer::OpenGLManager::new();
 
-    // enumerate monitors
-    let monitor = events_loop.get_primary_monitor();
-    println!("Creating window on {:?}", monitor.get_name());
+    info!("Initializing resource manager...");
+    let mut resource_manager = resource::ResourceManager::new();
 
-    let window = glutin::WindowBuilder::new()
-        .with_title("Rusty RPG")
-        .with_dimensions(LogicalSize::new(1280.0, 720.0));
-    let context = glutin::ContextBuilder::new()
-        .with_vsync(true);
-    
-    let gl_window = glutin::GlWindow::new(window, context, &events_loop)
-        .expect("failed to create window!");
-    
-    unsafe {
-        gl_window.make_current().expect("failed to make current");
-    }
-    
-    gl::load_with(|s| gl_window.get_proc_address(s) as *const _);
+    info!("Initializing render manager...");
+    let mut render_manager = renderer::RenderManager::new();
 
-    unsafe {
-        gl::ClearColor(0.0, 1.0, 0.0, 1.0);
-    }
+    info!("Loading resources...");
+    resource_manager.initialize();
 
-    let mut running = true;
-    while running {
-        events_loop.poll_events(|event| {
-            if let glutin::Event::WindowEvent{ event, .. } = event {
-                match event {
-                    glutin::WindowEvent::CloseRequested => running = false,
-                    glutin::WindowEvent::Resized(logical_size) => {
-                        let dpi_factor = gl_window.get_hidpi_factor();
-                        gl_window.resize(logical_size.to_physical(dpi_factor));
-                    },
-                    _ => ()
-                }
-            }
-        });
+    window_manager.run(|gl_window| {
+        render_manager.main_loop(gl_window, &resource_manager);
+    });
 
-        unsafe {
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-        }
-
-        gl_window.swap_buffers().unwrap();
-    }
+    resource_manager.shutdown();
 }

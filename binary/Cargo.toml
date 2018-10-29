@@ -5,4 +5,5 @@ authors = ["Alic Szecsei <aszecsei@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+cute-log = "1.1.1"
 engine = { path = "../engine" }
