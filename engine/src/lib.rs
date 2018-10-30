@@ -1,29 +1,10 @@
 #![feature(test)]
 
-extern crate cgmath;
-extern crate fnv;
-extern crate gl;
-extern crate glutin;
-extern crate image;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate log;
-extern crate num;
-extern crate rand;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate serde_yaml;
-extern crate strum;
-#[macro_use]
-extern crate strum_macros;
-extern crate test;
-
 mod renderer;
 mod resource;
 mod time;
+
+use log::info;
 
 pub fn run() {
     info!("Creating window...");
@@ -38,8 +19,14 @@ pub fn run() {
     info!("Loading resources...");
     resource_manager.initialize();
 
+    info!("Starting timer...");
+    let mut time_manager = time::TimeManager::new();
+
     window_manager.run(|gl_window| {
-        render_manager.main_loop(gl_window, &resource_manager);
+        let delta_time = time_manager.tick();
+        let delta_time_float = (delta_time.as_secs() as f64) + (f64::from(delta_time.subsec_nanos()) * 1e-9);
+        
+        render_manager.main_loop(gl_window, &resource_manager, delta_time_float);
     });
 
     resource_manager.shutdown();

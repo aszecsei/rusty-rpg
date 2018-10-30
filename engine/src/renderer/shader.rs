@@ -1,6 +1,7 @@
 use cgmath::Matrix;
 use gl::types::*;
 use std::ffi::CString;
+use strum_macros::{Display};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Shader {
@@ -26,6 +27,7 @@ impl Shader {
         }
     }
 
+    #[inline]
     pub fn use_shader(self) {
         unsafe {
             gl::UseProgram(self.id);

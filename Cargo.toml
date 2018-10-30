@@ -2,5 +2,5 @@
 
 members = [
   "binary",
-  "engine"
+  "engine",
 ]

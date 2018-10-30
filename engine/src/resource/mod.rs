@@ -4,8 +4,9 @@ use crate::renderer::shader::Shader;
 use crate::renderer::texture::Texture;
 
 use std::hash::{Hash, Hasher};
-use std::fs::File;
-use std::io::prelude::*;
+
+use image::GenericImageView;
+use resource::{resource, resource_str};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ResourceID(u64);
@@ -15,20 +16,6 @@ impl From<&str> for ResourceID {
         let mut hasher = FnvHasher::default();
         name.hash(&mut hasher);
         ResourceID(hasher.finish())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test::Bencher;
-
-    #[bench]
-    fn bench_resource_hash(b: &mut Bencher) {
-        b.iter(|| {
-            let n = crate::test::black_box("hello, world");
-            ResourceID::from(n)
-        });
     }
 }
 
@@ -46,32 +33,19 @@ impl ResourceManager {
     }
 
     pub fn initialize(&mut self) {
-        self.load_shader("resources/shaders/sprite.vert", "resources/shaders/sprite.frag", None, ResourceID::from("sprite_shader"));
+        self.load_shader(&resource_str!("../resources/shaders/sprite.vert"), &resource_str!("../resources/shaders/sprite.frag"), None, ResourceID::from("sprite_shader"));
+        self.load_shader(&resource_str!("../resources/shaders/font.vert"), &resource_str!("../resources/shaders/font.frag"), None, ResourceID::from("text_shader"));
+
+        self.load_texture(&resource!("../resources/textures/awesomeface.png"), image::ImageFormat::PNG, ResourceID::from("awesome_face"));
     }
 
-    pub fn load_shader(&mut self, vertex_shader_file: &str, fragment_shader_file: &str, geometry_shader_file: Option<&str>, name: ResourceID) -> Shader {
-        let mut vertex_file = File::open(vertex_shader_file).expect("failed to open file!");
-        let mut vertex_shader_source = String::new();
-        vertex_file.read_to_string(&mut vertex_shader_source).expect("failed to read file!");
-
-        let mut fragment_file = File::open(fragment_shader_file).expect("failed to open file!");
-        let mut fragment_shader_source = String::new();
-        fragment_file.read_to_string(&mut fragment_shader_source).expect("failed to read file!");
-
-        let geometry_shader_source = if let Some(geometry_shader_file) = geometry_shader_file {
-            let mut geometry_file = File::open(geometry_shader_file).expect("failed to open file!");
-            let mut geometry_shader_source = String::new();
-            geometry_file.read_to_string(&mut geometry_shader_source).expect("failed to read file!");
-            Some(geometry_shader_source)
-        } else {
-            None
-        };
+    fn load_shader(&mut self, vertex_shader_file: &str, fragment_shader_file: &str, geometry_shader_file: Option<&str>, name: ResourceID) -> Shader {
 
         let mut shader_program = Shader::new();
-        if let Some(geometry_shader_source) = geometry_shader_source {
-            shader_program.compile(&vertex_shader_source, &fragment_shader_source, Some(&geometry_shader_source));
+        if let Some(geometry_shader_file) = geometry_shader_file {
+            shader_program.compile(&vertex_shader_file, &fragment_shader_file, Some(&geometry_shader_file));
         } else {
-            shader_program.compile(&vertex_shader_source, &fragment_shader_source, None);
+            shader_program.compile(&vertex_shader_file, &fragment_shader_file, None);
         }
 
         self.shaders.insert(name, shader_program);
@@ -81,6 +55,22 @@ impl ResourceManager {
 
     pub fn get_shader(&self, name: ResourceID) -> Shader {
         self.shaders[&name]
+    }
+
+    fn load_texture(&mut self, texture_file: &[u8], format: image::ImageFormat, name: ResourceID) -> Texture {
+        let mut texture = Texture::new();
+
+        let img = image::load_from_memory_with_format(texture_file, format).expect("failed to load image");
+        let (width, height) = img.dimensions();
+
+        texture.from_source_rgba(width, height, &img.flipv().raw_pixels());
+
+        self.textures.insert(name, texture);
+        texture
+    }
+
+    pub fn get_texture(&self, name: ResourceID) -> Texture {
+        self.textures[&name]
     }
 
     pub fn shutdown(&mut self) {
