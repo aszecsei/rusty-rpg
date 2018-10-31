@@ -39,7 +39,7 @@ impl ResourceManager {
     fn load_texture(&mut self, texture_data: &[u8], format: image::ImageFormat, queue: &std::sync::Arc<vulkano::device::Queue>, old_future: Box<GpuFuture>, name: ResourceID) -> Box<GpuFuture> {
         let image = image::load_from_memory_with_format(texture_data, format).expect("failed to load image");
         let (width, height) = image.dimensions();
-        let image_data = image.flipv().raw_pixels().clone();
+        let image_data = image.raw_pixels().clone();
 
         let (texture, tex_future) = {
             vulkano::image::immutable::ImmutableImage::from_iter(

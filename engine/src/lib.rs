@@ -102,7 +102,7 @@ pub fn run() {
     let vertex_buffer = {
         #[derive(Debug, Clone)]
         struct Vertex {
-            position: [f32; 3],
+            position: [f32; 3], 
             color: [f32; 3],
             tex_coord: [f32; 2],
         }
@@ -121,7 +121,7 @@ pub fn run() {
     let index_buffer = vulkano::buffer::cpu_access::CpuAccessibleBuffer::from_iter(
         device.clone(), vulkano::buffer::BufferUsage::all(), ([
             0, 1, 2,
-            2, 3, 1,
+            2, 3, 0,
         ] as [u16; 6]).iter().cloned()).expect("failed to create buffer");
 
     debug!("Initializing shaders");
@@ -197,6 +197,12 @@ pub fn run() {
         .render_pass(vulkano::framebuffer::Subpass::from(render_pass.clone(), 0).unwrap())
         .build(device.clone())
         .unwrap());
+    
+    debug!("Creating persistent descriptor set");
+    let persistent_set = std::sync::Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
+        .add_sampled_image(resource_manager.get_texture(crate::resource::ResourceID::from("awesome_face")), sampler.clone()).unwrap()
+        .build().unwrap()
+    );
     
     debug!("Creating framebuffers");
     let mut framebuffers: Option<Vec<std::sync::Arc<vulkano::framebuffer::Framebuffer<_,_>>>> = None;
@@ -283,12 +289,6 @@ pub fn run() {
             uniform_buffer.next(uniform_data).unwrap()
         };
 
-        let set = std::sync::Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
-            .add_sampled_image(resource_manager.get_texture(crate::resource::ResourceID::from("awesome_face")), sampler.clone()).unwrap()
-            .add_buffer(uniform_buffer_subbuffer).unwrap()
-            .build().unwrap()
-        );
-
         let (image_num, acquire_future) = match vulkano::swapchain::acquire_next_image(swapchain.clone(), None) {
             Ok(r) => r,
             Err(vulkano::swapchain::AcquireError::OutOfDate) => {
@@ -298,16 +298,21 @@ pub fn run() {
             Err(err) => panic!("{:?}", err)
         };
 
+        let mutable_set = std::sync::Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 1)
+            .add_buffer(uniform_buffer_subbuffer).unwrap()
+            .build().unwrap()
+        );
+
         let command_buffer = vulkano::command_buffer::AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
             .begin_render_pass(framebuffers.as_ref().unwrap()[image_num].clone(), false,
-                vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()])
+                vec![[0.0, 0.0, 0.0, 1.0].into(), 1f32.into()])
             .unwrap()
             .draw_indexed(
                 pipeline.clone(),
                 &dynamic_state,
                 vertex_buffer.clone(),
                 index_buffer.clone(),
-                set.clone(),
+                (persistent_set.clone(), mutable_set.clone()),
                 ()).unwrap()
             .end_render_pass().unwrap()
             .build().unwrap();
