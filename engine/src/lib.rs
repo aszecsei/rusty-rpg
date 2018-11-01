@@ -88,9 +88,9 @@ pub fn run() {
 
         let format = caps.supported_formats[0].0;
 
-        let present_mode = if caps.present_modes.supports(vulkano::swapchain::PresentMode::Mailbox) {
+        let present_mode = if caps.present_modes.mailbox {
             vulkano::swapchain::PresentMode::Mailbox
-        } else if caps.present_modes.supports(vulkano::swapchain::PresentMode::Immediate) {
+        } else if caps.present_modes.immediate {
             vulkano::swapchain::PresentMode::Immediate
         } else {
             vulkano::swapchain::PresentMode::Fifo
@@ -145,8 +145,8 @@ pub fn run() {
     debug!("Initializing index buffer");
     let index_buffer = vulkano::buffer::cpu_access::CpuAccessibleBuffer::from_iter(
         device.clone(), vulkano::buffer::BufferUsage::all(), ([
-            0, 1, 2,
-            2, 3, 0,
+            2, 1, 0,
+            0, 3, 2,
         ] as [u16; 6]).iter().cloned()).expect("failed to create buffer");
 
     debug!("Initializing shaders");
@@ -218,7 +218,8 @@ pub fn run() {
         .viewports_dynamic_scissors_irrelevant(1)
         .fragment_shader(fs.main_entry_point(), ())
         .depth_stencil_simple_depth()
-        // .blend_alpha_blending()
+        .blend_alpha_blending()
+        .cull_mode_back()
         .render_pass(vulkano::framebuffer::Subpass::from(render_pass.clone(), 0).unwrap())
         .build(device.clone())
         .unwrap());
@@ -259,8 +260,8 @@ pub fn run() {
         // Create transformations
         let projection = cgmath::perspective(cgmath::Deg(FOV), WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
         // let projection = cgmath::ortho(-10.0, 10.0, -10.0, 10.0, 0.0, 100.0);
-        let view = cgmath::Matrix4::look_at(cgmath::Point3::new(0., 0., 4.),
-                                            cgmath::Point3::new(0., 0., 0.),
+        let view = cgmath::Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 4.0),
+                                            cgmath::Point3::new(0.0, 0.0, 0.0),
                                             cgmath::vec3(0., 1., 0.));
         let world: cgmath::Matrix4<f32> = cgmath::Matrix4::identity();
 
