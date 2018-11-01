@@ -1,14 +1,15 @@
 #![feature(test)]
 
+mod ecs;
 mod resource;
 
 use vulkano_win::VkSurfaceBuild;
 
-use log::{debug, error, info, warn};
-use vulkano::{impl_vertex, single_pass_renderpass, ordered_passes_renderpass};
-use vulkano::sync::GpuFuture;
-use vulkano::instance::debug::{self, DebugCallback};
 use cgmath::prelude::*;
+use log::{debug, error, info, warn};
+use vulkano::instance::debug::{self, DebugCallback};
+use vulkano::sync::GpuFuture;
+use vulkano::{impl_vertex, ordered_passes_renderpass, single_pass_renderpass};
 
 use spin_sleep::LoopHelper;
 
@@ -24,34 +25,49 @@ pub fn run() {
             ext_debug_report: true,
             ..vulkano_win::required_extensions()
         };
-        vulkano::instance::Instance::new(None, &extensions, vec!["VK_LAYER_LUNARG_standard_validation"]).expect("failed to create Vulkan instance")
+        vulkano::instance::Instance::new(
+            None,
+            &extensions,
+            vec!["VK_LAYER_LUNARG_standard_validation"],
+        )
+        .expect("failed to create Vulkan instance")
     };
 
-    let _debug_callback = DebugCallback::new(&instance, debug::MessageTypes {
-        error: true,
-        warning: true,
-        performance_warning: true,
-        information: false,
-        debug: false,
-    }, move |msg| {
-        let debug_msg = &format!("{}: {}", msg.layer_prefix, msg.description);
-        if msg.ty.error {
-            error!("{}", debug_msg);
-        } else if msg.ty.warning || msg.ty.performance_warning {
-            warn!("{}", debug_msg);
-        } else if msg.ty.information {
-            info!("{}", debug_msg);
-        } else if msg.ty.debug {
-            debug!("{}", debug_msg);
-        } else {
-            unreachable!();
-        }
-    }).expect("failed to create debug callback");
+    let _debug_callback = DebugCallback::new(
+        &instance,
+        debug::MessageTypes {
+            error: true,
+            warning: true,
+            performance_warning: true,
+            information: false,
+            debug: false,
+        },
+        move |msg| {
+            let debug_msg = &format!("{}: {}", msg.layer_prefix, msg.description);
+            if msg.ty.error {
+                error!("{}", debug_msg);
+            } else if msg.ty.warning || msg.ty.performance_warning {
+                warn!("{}", debug_msg);
+            } else if msg.ty.information {
+                info!("{}", debug_msg);
+            } else if msg.ty.debug {
+                debug!("{}", debug_msg);
+            } else {
+                unreachable!();
+            }
+        },
+    )
+    .expect("failed to create debug callback");
 
     debug!("Selecting physical device");
     let physical = vulkano::instance::PhysicalDevice::enumerate(&instance)
-        .next().expect("no device available");
-    info!("Using device: {} (type: {:?})", physical.name(), physical.ty());
+        .next()
+        .expect("no device available");
+    info!(
+        "Using device: {} (type: {:?})",
+        physical.name(),
+        physical.ty()
+    );
 
     debug!("Initializing window");
     let mut events_loop = winit::EventsLoop::new();
@@ -59,22 +75,29 @@ pub fn run() {
         .with_dimensions(winit::dpi::LogicalSize::new(WIDTH.into(), HEIGHT.into()))
         .with_resizable(false)
         .with_title("Rusty RPG")
-        .build_vk_surface(&events_loop, instance.clone()).unwrap();
-    
+        .build_vk_surface(&events_loop, instance.clone())
+        .unwrap();
+
     debug!("Selecting GPU");
-    let queue_family = physical.queue_families().find(|&q| {
-        q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
-    }).expect("couldn't find a graphical queue family");
+    let queue_family = physical
+        .queue_families()
+        .find(|&q| q.supports_graphics() && surface.is_supported(q).unwrap_or(false))
+        .expect("couldn't find a graphical queue family");
 
     debug!("Initializing device");
     let (device, mut queues) = {
         let device_ext = vulkano::device::DeviceExtensions {
             khr_swapchain: true,
-            .. vulkano::device::DeviceExtensions::none()
+            ..vulkano::device::DeviceExtensions::none()
         };
 
-        vulkano::device::Device::new(physical, physical.supported_features(), &device_ext,
-            [(queue_family, 0.5)].iter().cloned()).expect("failed to create device")
+        vulkano::device::Device::new(
+            physical,
+            physical.supported_features(),
+            &device_ext,
+            [(queue_family, 0.5)].iter().cloned(),
+        )
+        .expect("failed to create device")
     };
 
     let queue = queues.next().unwrap();
@@ -83,7 +106,9 @@ pub fn run() {
 
     debug!("Initializing swapchain");
     let (mut swapchain, mut images) = {
-        let caps = surface.capabilities(physical).expect("failed to get surface capabilities");
+        let caps = surface
+            .capabilities(physical)
+            .expect("failed to get surface capabilities");
         dimensions = caps.current_extent.unwrap_or([WIDTH, HEIGHT]);
 
         let format = caps.supported_formats[0].0;
@@ -116,42 +141,72 @@ pub fn run() {
             vulkano::swapchain::CompositeAlpha::Opaque,
             present_mode,
             true,
-            None
-        ).expect("failed to create swapchain")
+            None,
+        )
+        .expect("failed to create swapchain")
     };
 
     debug!("Initializing depth buffer");
-    let mut depth_buffer = vulkano::image::attachment::AttachmentImage::transient(device.clone(), dimensions, vulkano::format::D16Unorm).expect("failed to create depth buffer");
+    let mut depth_buffer = vulkano::image::attachment::AttachmentImage::transient(
+        device.clone(),
+        dimensions,
+        vulkano::format::D16Unorm,
+    )
+    .expect("failed to create depth buffer");
 
     debug!("Initializing vertex buffer");
     let vertex_buffer = {
         #[derive(Debug, Clone)]
         struct Vertex {
-            position: [f32; 3], 
+            position: [f32; 3],
             color: [f32; 3],
             tex_coord: [f32; 2],
         }
         impl_vertex!(Vertex, position, color, tex_coord);
 
         vulkano::buffer::CpuAccessibleBuffer::from_iter(
-            device.clone(), vulkano::buffer::BufferUsage::all(), [
-                Vertex { position: [-0.5, -0.5, 0.0],   color: [1.0, 0.0, 0.0], tex_coord: [0.0, 0.0] },
-                Vertex { position: [0.5, -0.5, 0.0],    color: [0.0, 1.0, 0.0], tex_coord: [1.0, 0.0] },
-                Vertex { position: [0.5, 0.5, 0.0],     color: [0.0, 0.0, 1.0], tex_coord: [1.0, 1.0] },
-                Vertex { position: [-0.5, 0.5, 0.0],    color: [1.0, 1.0, 1.0], tex_coord: [0.0, 1.0] },
-            ].iter().cloned()).expect("failed to create buffer")
+            device.clone(),
+            vulkano::buffer::BufferUsage::all(),
+            [
+                Vertex {
+                    position: [-0.5, -0.5, 0.0],
+                    color: [1.0, 0.0, 0.0],
+                    tex_coord: [0.0, 0.0],
+                },
+                Vertex {
+                    position: [0.5, -0.5, 0.0],
+                    color: [0.0, 1.0, 0.0],
+                    tex_coord: [1.0, 0.0],
+                },
+                Vertex {
+                    position: [0.5, 0.5, 0.0],
+                    color: [0.0, 0.0, 1.0],
+                    tex_coord: [1.0, 1.0],
+                },
+                Vertex {
+                    position: [-0.5, 0.5, 0.0],
+                    color: [1.0, 1.0, 1.0],
+                    tex_coord: [0.0, 1.0],
+                },
+            ]
+            .iter()
+            .cloned(),
+        )
+        .expect("failed to create buffer")
     };
 
     debug!("Initializing index buffer");
     let index_buffer = vulkano::buffer::cpu_access::CpuAccessibleBuffer::from_iter(
-        device.clone(), vulkano::buffer::BufferUsage::all(), ([
-            2, 1, 0,
-            0, 3, 2,
-        ] as [u16; 6]).iter().cloned()).expect("failed to create buffer");
+        device.clone(),
+        vulkano::buffer::BufferUsage::all(),
+        ([2, 1, 0, 0, 3, 2] as [u16; 6]).iter().cloned(),
+    )
+    .expect("failed to create buffer");
 
     debug!("Initializing shaders");
     mod vs {
         use vulkano_shader_derive::VulkanoShader;
+
         #[derive(VulkanoShader)]
         #[ty = "vertex"]
         #[path = "../resources/shaders/sprite.vert"]
@@ -161,6 +216,7 @@ pub fn run() {
 
     mod fs {
         use vulkano_shader_derive::VulkanoShader;
+
         #[derive(VulkanoShader)]
         #[ty = "fragment"]
         #[path = "../resources/shaders/sprite.frag"]
@@ -168,13 +224,17 @@ pub fn run() {
         struct Dummy;
     }
 
-    let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(device.clone(), vulkano::buffer::BufferUsage::all());
+    let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(
+        device.clone(),
+        vulkano::buffer::BufferUsage::all(),
+    );
 
     let vs = vs::Shader::load(device.clone()).expect("failed to create shader module");
     let fs = fs::Shader::load(device.clone()).expect("failed to create shader module");
 
     debug!("Creating render pass");
-    let render_pass = std::sync::Arc::new(single_pass_renderpass!(device.clone(),
+    let render_pass = std::sync::Arc::new(
+        single_pass_renderpass!(device.clone(),
         attachments: {
             color: {
                 load: Clear, // clear the content of this attachment at the start of the drawing
@@ -193,7 +253,9 @@ pub fn run() {
             color: [color],
             depth_stencil: {depth}
         }
-    ).unwrap());
+    )
+        .unwrap(),
+    );
 
     debug!("Loading resources");
     let mut resource_manager = crate::resource::ResourceManager::new();
@@ -208,31 +270,45 @@ pub fn run() {
         vulkano::sampler::SamplerAddressMode::Repeat,
         vulkano::sampler::SamplerAddressMode::Repeat,
         vulkano::sampler::SamplerAddressMode::Repeat,
-        0.0, 1.0, 0.0, 0.0).expect("failed to create sampler");
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+    )
+    .expect("failed to create sampler");
 
     debug!("Creating pipeline");
-    let pipeline = std::sync::Arc::new(vulkano::pipeline::GraphicsPipeline::start()
-        .vertex_input_single_buffer()
-        .vertex_shader(vs.main_entry_point(), ())
-        .triangle_list()
-        .viewports_dynamic_scissors_irrelevant(1)
-        .fragment_shader(fs.main_entry_point(), ())
-        .depth_stencil_simple_depth()
-        .blend_alpha_blending()
-        .cull_mode_back()
-        .render_pass(vulkano::framebuffer::Subpass::from(render_pass.clone(), 0).unwrap())
-        .build(device.clone())
-        .unwrap());
-    
-    debug!("Creating persistent descriptor set");
-    let persistent_set = std::sync::Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
-        .add_sampled_image(resource_manager.get_texture(crate::resource::ResourceID::from("awesome_face")), sampler.clone()).unwrap()
-        .build().unwrap()
+    let pipeline = std::sync::Arc::new(
+        vulkano::pipeline::GraphicsPipeline::start()
+            .vertex_input_single_buffer()
+            .vertex_shader(vs.main_entry_point(), ())
+            .triangle_list()
+            .viewports_dynamic_scissors_irrelevant(1)
+            .fragment_shader(fs.main_entry_point(), ())
+            .depth_stencil_simple_depth()
+            .blend_alpha_blending()
+            .cull_mode_back()
+            .render_pass(vulkano::framebuffer::Subpass::from(render_pass.clone(), 0).unwrap())
+            .build(device.clone())
+            .unwrap(),
     );
-    
+
+    debug!("Creating persistent descriptor set");
+    let persistent_set = std::sync::Arc::new(
+        vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
+            .add_sampled_image(
+                resource_manager.get_texture(crate::resource::ResourceID::from("awesome_face")),
+                sampler.clone(),
+            )
+            .unwrap()
+            .build()
+            .unwrap(),
+    );
+
     debug!("Creating framebuffers");
-    let mut framebuffers: Option<Vec<std::sync::Arc<vulkano::framebuffer::Framebuffer<_,_>>>> = None;
-    
+    let mut framebuffers: Option<Vec<std::sync::Arc<vulkano::framebuffer::Framebuffer<_, _>>>> =
+        None;
+
     let mut recreate_swapchain = false;
 
     let mut previous_frame_end = resource_future;
@@ -243,7 +319,7 @@ pub fn run() {
         viewports: Some(vec![vulkano::pipeline::viewport::Viewport {
             origin: [0.0, 0.0],
             dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-            depth_range: 0.0 .. 1.0,
+            depth_range: 0.0..1.0,
         }]),
         scissors: None,
     };
@@ -258,51 +334,71 @@ pub fn run() {
         let _delta = loop_helper.loop_start();
 
         // Create transformations
-        let projection = cgmath::perspective(cgmath::Deg(FOV), WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
+        let projection =
+            cgmath::perspective(cgmath::Deg(FOV), WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
         // let projection = cgmath::ortho(-10.0, 10.0, -10.0, 10.0, 0.0, 100.0);
-        let view = cgmath::Matrix4::look_at(cgmath::Point3::new(0.0, 0.0, 4.0),
-                                            cgmath::Point3::new(0.0, 0.0, 0.0),
-                                            cgmath::vec3(0., 1., 0.));
+        let view = cgmath::Matrix4::look_at(
+            cgmath::Point3::new(0.0, 0.0, 4.0),
+            cgmath::Point3::new(0.0, 0.0, 0.0),
+            cgmath::vec3(0., 1., 0.),
+        );
         let world: cgmath::Matrix4<f32> = cgmath::Matrix4::identity();
 
         previous_frame_end.cleanup_finished();
 
         if recreate_swapchain {
-            dimensions = surface.capabilities(physical)
+            dimensions = surface
+                .capabilities(physical)
                 .expect("failed to get surface capabilities")
-                .current_extent.unwrap();
-            
+                .current_extent
+                .unwrap();
+
             let (new_swapchain, new_images) = match swapchain.recreate_with_dimension(dimensions) {
                 Ok(r) => r,
                 Err(vulkano::swapchain::SwapchainCreationError::UnsupportedDimensions) => {
                     continue;
-                },
-                Err(err) => panic!("{:?}", err)
+                }
+                Err(err) => panic!("{:?}", err),
             };
 
             swapchain = new_swapchain;
             images = new_images;
 
-            depth_buffer = vulkano::image::attachment::AttachmentImage::transient(device.clone(), dimensions, vulkano::format::D16Unorm).expect("failed to create depth buffer");
+            depth_buffer = vulkano::image::attachment::AttachmentImage::transient(
+                device.clone(),
+                dimensions,
+                vulkano::format::D16Unorm,
+            )
+            .expect("failed to create depth buffer");
 
             framebuffers = None;
 
             dynamic_state.viewports = Some(vec![vulkano::pipeline::viewport::Viewport {
                 origin: [0.0, 0.0],
                 dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-                depth_range: 0.0 .. 1.0,
+                depth_range: 0.0..1.0,
             }]);
 
             recreate_swapchain = false;
         }
 
         if framebuffers.is_none() {
-            framebuffers = Some(images.iter().map(|image| {
-                std::sync::Arc::new(vulkano::framebuffer::Framebuffer::start(render_pass.clone())
-                    .add(image.clone()).unwrap()
-                    .add(depth_buffer.clone()).unwrap()
-                    .build().unwrap())
-            }).collect::<Vec<_>>());
+            framebuffers = Some(
+                images
+                    .iter()
+                    .map(|image| {
+                        std::sync::Arc::new(
+                            vulkano::framebuffer::Framebuffer::start(render_pass.clone())
+                                .add(image.clone())
+                                .unwrap()
+                                .add(depth_buffer.clone())
+                                .unwrap()
+                                .build()
+                                .unwrap(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            );
         }
 
         let uniform_buffer_subbuffer = {
@@ -315,23 +411,38 @@ pub fn run() {
             uniform_buffer.next(uniform_data).unwrap()
         };
 
-        let (image_num, acquire_future) = match vulkano::swapchain::acquire_next_image(swapchain.clone(), None) {
-            Ok(r) => r,
-            Err(vulkano::swapchain::AcquireError::OutOfDate) => {
-                recreate_swapchain = true;
-                continue;
-            },
-            Err(err) => panic!("{:?}", err)
-        };
+        let (image_num, acquire_future) =
+            match vulkano::swapchain::acquire_next_image(swapchain.clone(), None) {
+                Ok(r) => r,
+                Err(vulkano::swapchain::AcquireError::OutOfDate) => {
+                    recreate_swapchain = true;
+                    continue;
+                }
+                Err(err) => panic!("{:?}", err),
+            };
 
-        let mutable_set = std::sync::Arc::new(vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 1)
-            .add_buffer(uniform_buffer_subbuffer).unwrap()
-            .build().unwrap()
+        let mutable_set = std::sync::Arc::new(
+            vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(
+                pipeline.clone(),
+                1,
+            )
+            .add_buffer(uniform_buffer_subbuffer)
+            .unwrap()
+            .build()
+            .unwrap(),
         );
 
-        let command_buffer = vulkano::command_buffer::AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap()
-            .begin_render_pass(framebuffers.as_ref().unwrap()[image_num].clone(), false,
-                vec![[0.0, 0.0, 0.0, 1.0].into(), 1f32.into()])
+        let command_buffer =
+            vulkano::command_buffer::AutoCommandBufferBuilder::primary_one_time_submit(
+                device.clone(),
+                queue.family(),
+            )
+            .unwrap()
+            .begin_render_pass(
+                framebuffers.as_ref().unwrap()[image_num].clone(),
+                false,
+                vec![[0.0, 0.0, 0.0, 1.0].into(), 1f32.into()],
+            )
             .unwrap()
             .draw_indexed(
                 pipeline.clone(),
@@ -339,23 +450,29 @@ pub fn run() {
                 vertex_buffer.clone(),
                 index_buffer.clone(),
                 (persistent_set.clone(), mutable_set.clone()),
-                ()).unwrap()
-            .end_render_pass().unwrap()
-            .build().unwrap();
-        
-        let future = previous_frame_end.join(acquire_future)
-            .then_execute(queue.clone(), command_buffer).unwrap()
+                (),
+            )
+            .unwrap()
+            .end_render_pass()
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let future = previous_frame_end
+            .join(acquire_future)
+            .then_execute(queue.clone(), command_buffer)
+            .unwrap()
             .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
             .then_signal_fence_and_flush();
-        
+
         match future {
             Ok(future) => {
                 previous_frame_end = Box::new(future) as Box<_>;
-            },
+            }
             Err(vulkano::sync::FlushError::OutOfDate) => {
                 recreate_swapchain = true;
                 previous_frame_end = Box::new(vulkano::sync::now(device.clone())) as Box<_>;
-            },
+            }
             Err(e) => {
                 error!("{:?}", e);
                 previous_frame_end = Box::new(vulkano::sync::now(device.clone())) as Box<_>;
@@ -366,19 +483,35 @@ pub fn run() {
             if fps < 30.0 {
                 warn!("Low FPS: {}", fps.round());
             }
-            surface.window().set_title(&format!("Rusty RPG: {} FPS", fps.round()));
+            surface
+                .window()
+                .set_title(&format!("Rusty RPG: {} FPS", fps.round()));
         }
 
         let mut done = false;
-        events_loop.poll_events(|ev| {
-            match ev {
-                winit::Event::WindowEvent { event: winit::WindowEvent::CloseRequested, .. } => done = true,
-                winit::Event::WindowEvent { event: winit::WindowEvent::KeyboardInput{ input: winit::KeyboardInput{ virtual_keycode: Some(winit::VirtualKeyCode::Escape), .. }, .. }, .. } => done = true,
-                _ => ()
-            }
+        events_loop.poll_events(|ev| match ev {
+            winit::Event::WindowEvent {
+                event: winit::WindowEvent::CloseRequested,
+                ..
+            } => done = true,
+            winit::Event::WindowEvent {
+                event:
+                    winit::WindowEvent::KeyboardInput {
+                        input:
+                            winit::KeyboardInput {
+                                virtual_keycode: Some(winit::VirtualKeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } => done = true,
+            _ => (),
         });
-        if done { return; }
-        
+        if done {
+            return;
+        }
+
         loop_helper.loop_sleep();
     }
 }
