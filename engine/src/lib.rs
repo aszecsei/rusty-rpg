@@ -7,6 +7,7 @@ use vulkano_win::VkSurfaceBuild;
 use log::{debug, error, info, warn};
 use vulkano::{impl_vertex, single_pass_renderpass, ordered_passes_renderpass};
 use vulkano::sync::GpuFuture;
+use vulkano::instance::debug::{self, DebugCallback};
 use cgmath::prelude::*;
 
 use spin_sleep::LoopHelper;
@@ -19,9 +20,33 @@ pub fn run() {
     info!("Initializing Vulkan");
     debug!("Creating Vulkan instance");
     let instance = {
-        let extensions = vulkano_win::required_extensions();
-        vulkano::instance::Instance::new(None, &extensions, None).expect("failed to create Vulkan instance")
+        let extensions = vulkano::instance::InstanceExtensions {
+            ext_debug_report: true,
+            ..vulkano_win::required_extensions()
+        };
+        vulkano::instance::Instance::new(None, &extensions, vec!["VK_LAYER_LUNARG_standard_validation"]).expect("failed to create Vulkan instance")
     };
+
+    let _debug_callback = DebugCallback::new(&instance, debug::MessageTypes {
+        error: true,
+        warning: true,
+        performance_warning: true,
+        information: false,
+        debug: false,
+    }, move |msg| {
+        let debug_msg = &format!("{}: {}", msg.layer_prefix, msg.description);
+        if msg.ty.error {
+            error!("{}", debug_msg);
+        } else if msg.ty.warning || msg.ty.performance_warning {
+            warn!("{}", debug_msg);
+        } else if msg.ty.information {
+            info!("{}", debug_msg);
+        } else if msg.ty.debug {
+            debug!("{}", debug_msg);
+        } else {
+            unreachable!();
+        }
+    }).expect("failed to create debug callback");
 
     debug!("Selecting physical device");
     let physical = vulkano::instance::PhysicalDevice::enumerate(&instance)
